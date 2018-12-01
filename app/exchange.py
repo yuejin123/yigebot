@@ -36,11 +36,7 @@ class ExchangeInterface:
 
             config = dict()
             if exchange_config[exchange]['api']['enabled']:
-                config.update({
-                    'apiKey': exchange_config[exchange]['api']['apiKey'],
-                    'secret': exchange_config[exchange]['api']['secret'],
-                    'password': exchange_config[exchange]['api']['password']
-                })
+               config =  exchange_config[exchange]['api']['setting']
 
             if exchange_config[exchange]['required']['enabled']:
                 config.update({"enableRateLimit": True})
@@ -52,6 +48,41 @@ class ExchangeInterface:
                 self.exchanges[new_exchange.id] = new_exchange
             else:
                 self.logger.error("Unable to load exchange %s", new_exchange)
+
+
+    @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    def get_live_data(self, market_pair, exchange, time_unit):
+        try:
+            if time_unit not in self.exchanges[exchange].timeframes:
+                raise ValueError(
+                    "{} does not support {} timeframe for OHLCV data. Possible values are: {}".format(
+                        exchange,
+                        time_unit,
+                        list(self.exchanges[exchange].timeframes)
+                    )
+                )
+        except AttributeError:
+            self.logger.error(
+                '%s interface does not support timeframe queries! We are unable to fetch data!',
+                exchange
+            )
+            raise AttributeError(sys.exc_info())
+
+        ohlcv = self.exchanges[exchange].fetch_ohlcv(
+            market_pair,
+            timeframe=time_unit,
+            limit=1
+        )[0]
+        if not ohlcv:
+            raise ValueError('No historical data provided returned by exchange.')
+
+
+        ticker_data = self.exchanges[exchange].fetch_ticker(market_pair)
+
+        if not ticker_data:
+            raise ValueError('No ticker data provided returned by exchange.')
+
+        return ohlcv, ticker_data
 
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
@@ -157,21 +188,20 @@ class ExchangeInterface:
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
     def get_exchange_markets(self, exchanges=[], markets=[]):
-        """Get position data for all symbol pairs listed on all api-enabled exchanges.
+        """Get market information for all symbol pairs listed on all api-enabled exchanges.
 
         Args:
             markets (list, optional): A list of markets to get from the exchanges. Default is all
                 markets.
-            exchanges (list, optional): A list of exchanges to collect market data from. Default is
+            exchanges (list, optional): A list of exchanges to collect information from. Default is
                 all enabled exchanges.
 
         Decorators:
             retry
 
         Returns:
-            dict: A dictionary containing position data for all symbol pairs.
+            dict: A dictionary containing market information for all symbol pairs.
         """
-
 
         if not exchanges:
             exchanges = self.exchanges

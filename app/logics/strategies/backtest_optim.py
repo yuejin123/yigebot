@@ -23,6 +23,8 @@ class Backtest_Optim:
         """
         Args:
         ohclv: returns from ccxt.exchange.fetch_ohlcv()
+        frequency: {'daily', 'minute'}, optional) – The data frequency to run the algorithm at.
+
         """
 
         def convert_to_dataframe(historical_data):
@@ -131,11 +133,13 @@ class Backtest_Optim:
                        bb = bb[1][-1],
                        buy=buy,
                        sell=sell)
+
             self.handle_data= handle_data
+
             return handle_data
 
 
-    def run_algoritm_(self,params_list,capital_base=800000,exchange_calendar=TFSExchangeCalendar()):
+    def run_algorithm(self,params_list,capital_base=800000,exchange_calendar=TFSExchangeCalendar(),**kwargs):
         #TODO: sortino ratio warning, suppress?
         """
 
@@ -164,7 +168,7 @@ class Backtest_Optim:
                       data = self.panel,\
                       capital_base=capital_base,\
                       data_frequency = self.frequency,\
-                      trading_calendar=exchange_calendar)
+                      trading_calendar=exchange_calendar,**kwargs,)
 
 
         return result
@@ -197,7 +201,7 @@ class Backtest_Optim:
                 sharpe=-Infinity
                 sharpe_list.append(sharpe)
                 continue
-            perf = self.run_algoritm_(params_list=params)
+            perf = self.run_algorithm(params_list=params)
             sharpe = perf.sharpe[-1]
             sharpe_list.append(sharpe)
             if sharpe > max_sharpe:
@@ -208,3 +212,28 @@ class Backtest_Optim:
         return max_sharpe,best
 
 
+    def refit(self,ohlcv,params = None, ba = None,**kwargs):
+        """
+        :param ohlcv: a DataFrame object with OHLCV columns ordered by date, ascending
+        :param param:
+        :return:
+        """
+
+        required_params = ['trailing_window', 'ema_s', 'ema_l', 'bb']
+        if not all(param in params for param in required_params):
+            raise KeyError("incorrect parameters")
+        lookback = params['trailing_window']
+        close = ohlcv['close']
+        ema_s = EMA(close[-lookback:], timeperiod=params['ema_s'])
+        ema_l = EMA(close[-lookback:], timeperiod=params['ema_l'])
+        bb = BBANDS(close[-lookback:], timeperiod=params['bb'])
+        if ba in None:
+            buy_signal = (ema_s > ema_l) and (close[-1] > (bb[1])) and (
+                    close[-1] > ema_s)
+        else:
+            mid = (bid[-1]+ask[-1])/2
+            buy_signal = (ema_s > ema_l) and (mid > (bb[1])) and (
+                    mid > ema_s)
+
+
+        return {'buy':buy_signal,'sell': None}

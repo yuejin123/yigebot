@@ -1,9 +1,4 @@
-from talib import RSI
-from talib import MFI
-from talib import OBV
-from talib import BBANDS
-
-import logics.strategies.backtest_optim
+from zipline.api import order, record
 from logics.strategies.backtest_optim import Backtest_Optim
 
 class CDL_Test(Backtest_Optim):
@@ -11,7 +6,7 @@ class CDL_Test(Backtest_Optim):
     def __init__(self, ohclv, symbol='BTC', frequency='daily'):
         super().__init__(ohclv,symbol,frequency)
 
-    # override the handle_data_ method for different strategie
+    # override the _handle_data method for different strategie
     def handle_data_(self,handle_data_func = None):
         """
         The handle data function for testing candle patterns
@@ -40,7 +35,7 @@ class CDL_Test(Backtest_Optim):
                 buy_signal = candle_pattern[-1]>0
                 sell_sigal = candle_pattern[-1]<=0
 
-                #TODO: add more trading control
+
                 if buy_signal and not context.invested:
                     order(context.asset, 100)
                     context.invested = True
@@ -83,7 +78,7 @@ class CDL_Test(Backtest_Optim):
         max_sharpe = -Infinity
         sharpe_list=[]
         for params in grid:
-            perf = self.run_algoritm_(params_list=params)
+            perf = self.run_algorithm(params_list=params)
             sharpe = perf.sharpe[-1]
             sharpe_list.append(sharpe)
             # nothing happened
@@ -96,3 +91,19 @@ class CDL_Test(Backtest_Optim):
         return max_sharpe,best
 
 
+    def refit(self,ohlcv,params = None, ba = None,**kwargs):
+        required_params = ['trailing_window', 'indicator']
+        if not all(param in params for param in required_params):
+            raise KeyError("incorrect parameter list")
+        lookback = params['trailing_window']
+        ohlc= ohlcv[['open', 'high', 'low', 'close']].iloc[-lookback:,]
+        if ohlc.isnull().values.any():
+            return
+        cdl_indicator = params['indicator']
+        candle_pattern = cdl_indicator(**ohlc.to_dict(orient='series'))
+
+        buy_signal = candle_pattern[-1] > 0
+        sell_sigal = candle_pattern[-1] <= 0
+
+
+        return {'buy':buy_signal,'sell':sell_sigal}
