@@ -13,8 +13,6 @@ db_fullpath = os.path.join(
         os.path.realpath(__file__)),
     db_name)
 
-db_fullpath = '/Users/yuejin/Google/money/tradeBot/yigebot/app/market/yigebot.db'
-
 lock = Lock()
 engine = db.create_engine(
     'sqlite:///{}'.format(db_fullpath),
