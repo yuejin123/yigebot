@@ -1,30 +1,28 @@
 import logging
-
 import sys
 import ccxt
-import datetime
 from tenacity import retry, retry_if_exception_type, stop_after_attempt
-from exchange import ExchangeInterface
 from sqlalchemy import select, and_
 logger = logging.getLogger(__name__)
 
 # Pull data from the exchange at a given interval and write to the database
-#TODO:reconcile the difference between history and latest tickers
-# How to control the trade given the live data feed
+
 from market import database
 from threading import Thread
-engine = database.engine
-conn = engine.connect()
 import time as time_
 import pandas as pd
 
+engine = database.engine
+conn = engine.connect()
+
+
+tickers={}
 def start_ticker(exchangeInterface,exchange, market_pair='BTC/USD',  interval='1h'):
     """Start a ticker/timer that notifies market watchers when to pull a new candle"""
-    market_pair[interval] = Thread(
-            target=__start_ticker, args=(
-                exchangeInterface,exchange,),
-                kwargs={market_pair:market_pair,interval:interval},name='start_ticker').start()
-def get_latest_data(exchange,market_pair, interval,periods = 1):
+    tickers[interval] = Thread(\
+            target=__start_ticker, args=(exchangeInterface,exchange,market_pair,interval,),name='start_ticker').start()
+
+def get_latest_data_from_db(exchange,market_pair, interval,periods = 1):
     """
 
     :param exchange: name of the exchange
@@ -48,13 +46,13 @@ def get_latest_data(exchange,market_pair, interval,periods = 1):
 
 
 @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
-def __start_ticker(exchangeInterface,exchange, market_pair,  interval):
+def __start_ticker(exchangeInterface,exchange, market_pair, interval,backfill=300):
     """Start a ticker on its own thread
 
     exchangeInterface: ExchangeInterface
     exchange: exchange name
     interval: ('1m', '5m', '1h', '6h')
-
+    backfill: number of tickers to backfiil
     """
 
     try:
@@ -73,25 +71,39 @@ def __start_ticker(exchangeInterface,exchange, market_pair,  interval):
         )
         raise AttributeError(sys.exc_info())
 
+    print("Get the latest {} tickers".format(str(backfill)))
+    logger.info("Get the latest {} tickers".format(str(backfill)))
+    hist_ohlcv = exchangeInterface.get_historical_data(exchange,market_pair, interval, max_periods=backfill)
+    ohlcv_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+    ohlcv_info = []
+    for record in hist_ohlcv:
+        db_record = dict()
+        db_record.update({ohlcv_columns[i]: record[i] for i in range(len(ohlcv_columns))})
+        db_record.update({'exchange': exchange, 'symbol': market_pair, 'interval': interval})
+        ohlcv_info.append(db_record)
+
+    with database.lock:
+        ins = database.OHLCV.insert()
+        conn.execute(ins, ohlcv_info)
 
     logger.info(interval + " ticker running...")
     live_tick_count = 0
     while True:
+
+        print("Live Tick: {}".format(str(live_tick_count)))
         logger.info("Live Tick: {}".format(str(live_tick_count)))
         print(interval + " tick")
-        ohlcv,ticker = exchangeInterface.get_live_data(market_pair,exchange,interval)
+        ohlcv,ticker = exchangeInterface.get_live_data(exchange,market_pair,interval)
         with database.lock:
-            ins = database.OHLCV.insert().values (Timestamp = ticker['timestamp'],
-                                                 Exchange=exchange,
-                                                 Symbol=market_pair,
-                                                 Datetime=ticker['datetime'],
-                                                 Open=ohlcv[1], High=ohlcv[2], Low=ohlcv[3], Close=ohlcv[4], Volume=ohlcv[5],
-                                                 Interval=interval,
-                                                 Ask = ticker['ask'],
-                                                 Bid = ticker['bid'])
+            ins = database.OHLCV.insert().values (timestamp = ticker['timestamp'],
+                                                 exchange=exchange,
+                                                 symbol=market_pair,
+                                                 datetime=ticker['datetime'],
+                                                 open=ohlcv[1], high=ohlcv[2], low=ohlcv[3], close=ohlcv[4], volume=ohlcv[5],
+                                                 interval=interval,
+                                                 ask = ticker['ask'],
+                                                 bid = ticker['bid'])
             conn.execute(ins)
-
-        # TODO: run the algorithm & update position & trade
 
         live_tick_count += 1
         print(ticker['datetime'])
@@ -116,3 +128,5 @@ def __convert_interval_to_int(interval):
 # def convert_timestamp_to_date(timestamp):
 #     value = datetime.datetime.fromtimestamp(float(str(timestamp)[:-3]))  #this might only work on bittrex candle timestamps
 #     return value.strftime('%Y-%m-%d %H:%M:%S')
+
+

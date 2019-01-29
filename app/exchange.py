@@ -4,12 +4,13 @@
 import re
 import sys
 import time as tm
-from datetime import datetime, timedelta,time
+import datetime as dt
 from pytz import timezone
 import itertools
 
 from pandas.tseries.offsets import CustomBusinessDay
 from trading_calendars import register_calendar, TradingCalendar
+from trading_calendars.errors import  CalendarNameCollision
 from zipline.utils.memoize import lazyval
 
 import ccxt
@@ -18,7 +19,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt
 import pandas as pd
 
 class ExchangeInterface:
-    """Interface for performing queries against exchange API's
+    """Interface for performing queries against exchange APIs
     """
 
     def __init__(self, exchange_config):
@@ -49,9 +50,8 @@ class ExchangeInterface:
             else:
                 self.logger.error("Unable to load exchange %s", new_exchange)
 
-
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
-    def get_live_data(self, market_pair, exchange, time_unit):
+    def get_live_data(self, exchange,market_pair,  time_unit):
         try:
             if time_unit not in self.exchanges[exchange].timeframes:
                 raise ValueError(
@@ -73,6 +73,9 @@ class ExchangeInterface:
             timeframe=time_unit,
             limit=1
         )[0]
+
+
+
         if not ohlcv:
             raise ValueError('No historical data provided returned by exchange.')
 
@@ -86,7 +89,7 @@ class ExchangeInterface:
 
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
-    def get_historical_data(self, market_pair, exchange, time_unit, start_date=None, max_periods=1000):
+    def get_historical_data(self, exchange, market_pair, time_unit, start_date=None, max_periods=1000):
         """
         Get historical OHLCV for a symbol pair
 
@@ -138,8 +141,8 @@ class ExchangeInterface:
 
             timedelta_args = { timedelta_values[time_period]: int(time_quantity) }
 
-            start_date_delta = timedelta(**timedelta_args)
-            now_ = datetime.utcnow().replace(tzinfo=timezone('utc'))
+            start_date_delta = dt.timedelta(**timedelta_args)
+            now_ = dt.datetime.utcnow().replace(tzinfo=timezone('utc'))
             max_days_date = now_ - (max_periods * start_date_delta)
             start_date = int(max_days_date.astimezone(timezone('UTC')).timestamp() * 1000)
 
@@ -156,6 +159,8 @@ class ExchangeInterface:
             raise ValueError('No historical data provided returned by exchange.')
 
         # REST polling
+
+        timeout = tm.time()+60 #CHANGEME the while loop will stop after 60 seconds
         while (len(historical_data_)<max_periods) and (
             int((now_-start_date_delta).timestamp() * 1000)>historical_data_[-1][0]
                 ):
@@ -163,7 +168,7 @@ class ExchangeInterface:
             max_periods_ = max_periods-len(historical_data_)
             max_days_date_ = now_ - (max_periods_ * start_date_delta)
             # start_date_= int(max_days_date_.astimezone(timezone('UTC')).timestamp() * 1000)
-            start_date_ = int((datetime.fromtimestamp(historical_data_[-1][0]/1000)+start_date_delta).timestamp()*1000)
+            start_date_ = int((dt.datetime.fromtimestamp(historical_data_[-1][0]/1000)+start_date_delta).timestamp()*1000)
             print(len(historical_data_))
             print(max_days_date_)
             historical_data = self.exchanges[exchange].fetchOHLCV(
@@ -174,57 +179,128 @@ class ExchangeInterface:
             historical_data.sort()
             historical_data  = list(k for k,_ in itertools.groupby(historical_data))
             historical_data_.extend(historical_data)
+            if tm.time()>timeout:
+                self.logger.info("{} data points are captured".format(len(historical_data_)))
+                break
 
         # Sort by timestamp in ascending order
         historical_data_.sort(key=lambda d: d[0])
 
         # rateLimit:  request rate limit in milliseconds.
-        # Specifies the required minimal delay between two consequent HTTP requests to the same exchange
+        # Specifies the required minimal delay between two consequent HTTP requests to the same exchanges
 
         tm.sleep(self.exchanges[exchange].rateLimit / 1000)
 
         return historical_data_
 
+    # @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    # def get_exchange_markets(self, exchanges=[], markets=[]):
+    #     """Get market information for all symbol pairs listed on all api-enabled exchanges.
+    #
+    #     Args:
+    #         markets (list, optional): A list of markets to get from the exchanges. Default is all
+    #             markets.
+    #         exchanges (list, optional): A list of exchanges to collect information from. Default is
+    #             all enabled exchanges.
+    #
+    #     Decorators:
+    #         retry
+    #
+    #     Returns:
+    #         dict: A dictionary containing market information for all symbol pairs.
+    #     """
+    #
+    #     if not exchanges:
+    #         exchanges = self.exchanges
+    #
+    #     exchange_markets = dict()
+    #     for exchange in exchanges:
+    #
+    #         exchange_markets[exchange] = self.exchanges[exchange].load_markets()
+    #
+    #         if markets:
+    #             curr_markets = exchange_markets[exchange]
+    #
+    #             # Only retrieve markets the users specified
+    #             exchange_markets[exchange] = { key: curr_markets[key] for key in curr_markets if key in markets }
+    #
+    #             for market in markets:
+    #                 if market not in exchange_markets[exchange]:
+    #                     self.logger.info('%s has no market %s, ignoring.', exchange, market)
+    #
+    #         tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+    #
+    #     return exchange_markets
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
-    def get_exchange_markets(self, exchanges=[], markets=[]):
-        """Get market information for all symbol pairs listed on all api-enabled exchanges.
-
-        Args:
-            markets (list, optional): A list of markets to get from the exchanges. Default is all
-                markets.
-            exchanges (list, optional): A list of exchanges to collect information from. Default is
-                all enabled exchanges.
+    def get_order_book(self, exchange,market_pair):
+        """
+        Get order book for a symbol pair
 
         Decorators:
             retry
 
+        Args:
+            exchange (str): Contains the exchange to fetch the historical data from.
+            market_pair (str): Contains the symbol pair to operate on i.e. BURST/BTC
         Returns:
-            dict: A dictionary containing market information for all symbol pairs.
+            list: Contains a dict of DataFrame which contain 'bids' and 'spreads', and each data frame contains 'price' and 'volume'
         """
 
-        if not exchanges:
-            exchanges = self.exchanges
+        order_book_raw = self.exchanges[exchange].fetch_order_book(market_pair)
+        order_book = {'bids': pd.DataFrame({'price': [i[0] for i in order_book_raw['bids']],
+                                            'volume': [i[1] for i in order_book_raw['bids']]}),
+                      'asks': pd.DataFrame({'price': [i[0] for i in order_book_raw['asks']],
+                                            'volume': [i[1] for i in order_book_raw['asks']]})
+                      }
 
-        exchange_markets = dict()
-        for exchange in exchanges:
+        if not order_book:
+            raise ValueError("No order book data returned by the exchange")
 
-            exchange_markets[exchange] = self.exchanges[exchange].load_markets()
+        return order_book
 
-            if markets:
-                curr_markets = exchange_markets[exchange]
+    @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    def get_free_balance(self, exchange,symbol='USD'):
+        """
+        Get free balance for the account within the exchange
 
-                # Only retrieve markets the users specified
-                exchange_markets[exchange] = { key: curr_markets[key] for key in curr_markets if key in markets }
+        :param exchange: string or list of string, exchange to query the balance
+        :param symbol: string, symbol to query
+        :return: balance
+        """
+        free = None
+        if self.exchanges[exchange].has['fetchBalance']:
+            free = self.exchanges[exchange].fetchBalance()[symbol]['free']
 
-                for market in markets:
-                    if market not in exchange_markets[exchange]:
-                        self.logger.info('%s has no market %s, ignoring.', exchange, market)
+        if free is None:
+            raise ValueError("No " + symbol +" balance data returned by the exchange")
 
-            tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+        return free
 
-        return exchange_markets
+    @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    def get_order_info(self, exchange,orderID):
+        """
+        Get free balance for the account within the exchange
 
+        :param exchange: string or list of string, exchange to query the balance
+        :param orderID: string, order ID
+        :return: order status and trade information related to the order if the order is closed.
+        """
+        my_trade_keys = ["timestamp","datetime","id","order","amount","price","cost"]
+        trade_book_columns =  ['timestamp','datetome','tradeID','orderID','amount','price','cost']
+        trade_info = None
+        status=None
+        if self.exchanges['exchange'].has['fetch_order']:
+            order_info = self.exchanges[exchange].fetch_order(orderID)
+            status = order_info['status']
+        if not status: raise ValueError('The exchange does not return order status')
+
+        elif status !='closed': return {'status':status, 'info':trade_info}
+        else:
+            my_trades =  self.exchanges[exchange].fetch_my_trades(order_info['symbol'])
+            right_trades = list(filter(lambda a: a['order']==orderID,my_trades))
+            trade_info = [{info[0]:trade[info[1]] for info in zip(trade_book_columns,my_trade_keys)} for trade in right_trades]
+            return {'status': status,'info':trade_info}
 
 class TFSExchangeCalendar(TradingCalendar):
     """
@@ -255,14 +331,14 @@ class TFSExchangeCalendar(TradingCalendar):
         """
         The time in which our exchange will open each day.
         """
-        return time(0,0)
+        return dt.time(0,0)
 
     @property
     def close_time(self):
         """
         The time in which our exchange will close each day.
         """
-        return time(23, 59)
+        return dt.time(23, 59)
 
     @lazyval
     def day(self):
@@ -275,10 +351,12 @@ class TFSExchangeCalendar(TradingCalendar):
         )
 
 
-start_session = pd.Timestamp('2012-01-07', tz='utc')
-end_session = pd.Timestamp('2018-11-13', tz='utc')
-
-register_calendar(
-    'TFS',
-    TFSExchangeCalendar(start=start_session, end=end_session)
-)
+start_session = pd.Timestamp('2000-01-07', tz='utc')
+end_session = pd.Timestamp('2099-12-31', tz='utc')
+try:
+    register_calendar(
+        'TFS',
+        TFSExchangeCalendar(start=start_session, end=end_session)
+    )
+except CalendarNameCollision:
+    pass

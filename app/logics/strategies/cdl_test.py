@@ -3,8 +3,8 @@ from logics.strategies.backtest_optim import Backtest_Optim
 
 class CDL_Test(Backtest_Optim):
 
-    def __init__(self, ohclv, symbol='BTC', frequency='daily'):
-        super().__init__(ohclv,symbol,frequency)
+    def __init__(self, ohlcv, symbol='BTC', frequency='daily'):
+        super().__init__(ohlcv,symbol,frequency)
 
     # override the _handle_data method for different strategie
     def handle_data_(self,handle_data_func = None):
@@ -96,14 +96,15 @@ class CDL_Test(Backtest_Optim):
         if not all(param in params for param in required_params):
             raise KeyError("incorrect parameter list")
         lookback = params['trailing_window']
-        ohlc= ohlcv[['open', 'high', 'low', 'close']].iloc[-lookback:,]
-        if ohlc.isnull().values.any():
+        ohlcv= ohlcv[['open', 'high', 'low', 'close']].iloc[-lookback:,]
+        if ohlcv.isnull().values.any():
+            print("not enough data")
             return
         cdl_indicator = params['indicator']
-        candle_pattern = cdl_indicator(**ohlc.to_dict(orient='series'))
+        candle_pattern = cdl_indicator(**ohlcv.to_dict(orient='series'))
 
-        buy_signal = candle_pattern[-1] > 0
-        sell_sigal = candle_pattern[-1] <= 0
+        buy_signal = candle_pattern.tolist()[-1] > 0
+        sell_sigal = candle_pattern.tolist()[-1] <= 0
 
 
         return {'buy':buy_signal,'sell':sell_sigal}

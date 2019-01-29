@@ -46,8 +46,8 @@ OrderBook = db.Table('OrderBook', metadata,
                     db.Column('exchange', db.String),
                     db.Column('symbol', db.String),
                     db.Column('position', db.String),
-                    db.Column('amount', db.Float),
-                    db.Column('price', db.Float),extend_existing=True)
+                    db.Column('amount', db.Float), # ordered amount of base currency
+                    db.Column('price', db.Float),extend_existing=True) # float price in quote currency
 
 TradeBook = db.Table('TradeBook',metadata,
                      db.Column('tradeID',db.String,primary_key=True),
@@ -56,7 +56,7 @@ TradeBook = db.Table('TradeBook',metadata,
                      db.Column('orderID',db.String,db.ForeignKey('OrderBook.orderID')),
                      db.Column('amount', db.Float),
                      db.Column('price', db.Float),
-                     db.Column('cost',db.Float),extend_existing=True)
+                     db.Column('cost',db.Float),extend_existing=True) #total cost (including fees), `price * amount`
 
 Position = db.Table('Position',metadata,
                     db.Column('timestamp',db.Integer),

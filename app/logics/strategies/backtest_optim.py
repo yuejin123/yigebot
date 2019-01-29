@@ -19,10 +19,10 @@ class Backtest_Optim:
     """
 
 
-    def __init__(self,ohclv,asset_symbol='BTC',frequency='daily'):
+    def __init__(self,ohlcv,asset_symbol='BTC',frequency='daily'):
         """
         Args:
-        ohclv: returns from ccxt.exchange.fetch_ohlcv()
+        ohlcv: returns from ccxt.exchange.fetch_ohlcv()
         frequency: {'daily', 'minute'}, optional) – The data frequency to run the algorithm at.
 
         """
@@ -52,9 +52,10 @@ class Backtest_Optim:
 
         self.asset_symbol = asset_symbol
         self.frequency = frequency
-        ohlcv_df = convert_to_dataframe(ohclv)
+        ohlcv_df = convert_to_dataframe(ohlcv)
         data = OrderedDict()
         temp = ohlcv_df
+        # FIXME: only works for daily frequency data...
         if frequency =='daily':
             temp.index = list(map(lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0), ohlcv_df.close.index))
         data[self.asset_symbol] = temp
@@ -116,7 +117,6 @@ class Backtest_Optim:
                 sell = False
                 buy_signal = (ema_s[-1] > ema_l[-1]) and (trailing_window.values[-1]>(bb[1][-1])) and  (trailing_window.values[-1]>ema_s[-1])
 
-                #TODO: add more trading control
                 if buy_signal and not context.invested:
                     order(context.asset, 100)
                     context.invested = True
@@ -215,8 +215,9 @@ class Backtest_Optim:
     def refit(self,ohlcv,params = None, ba = None,**kwargs):
         """
         :param ohlcv: a DataFrame object with OHLCV columns ordered by date, ascending
-        :param param:
-        :return:
+        :param params: optimal parameters
+        :ba: bid ask spread
+        :return: signal
         """
 
         required_params = ['trailing_window', 'ema_s', 'ema_l', 'bb']
