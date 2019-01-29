@@ -1,5 +1,3 @@
-from market import database
-from threading import Thread
 import pandas as pd
 import logging
 logger = logging.getLogger(__name__)
@@ -22,9 +20,9 @@ class Position_Control:
         self.target = target
         self.stop_loss = loss
 
-    def __simple_control(self,position_ohlcv):
+    def _simple_control(self,position_ohlcv):
 
-        logger.info("Using simple position control with profit target " + str(self.target) + 'and stop loss limit ' + self.stop_loss)
+        logger.info("Using simple position control with profit target {} and stop loss limit {}".format(self.target,self.stop_loss))
         sell = False
         if position_ohlcv['position']=='long':
             # profit target
@@ -40,15 +38,18 @@ class Position_Control:
 
         return sell
 
-    def control(self,control_method,position_ohlcv,*args,**kwargs):
+    def control(self,control_method=None,position_ohlcv=None,*args,**kwargs):
         """
 
-        :param control_method: a private function that specifies the details about controlling the position
+        :param control_method: a given function that specifies the details about controlling the position
         :param position_ohlcv: DataFrame object, the data frame with information about the position and the market information
         :param args:
         :param kwargs:
         :return: position_ohlcv with an additional column 'sell'
         """
+
+        if control_method is None: control_method = self._simple_control
+        if position_ohlcv is None: position_ohlcv = self.combined
         if isinstance(position_ohlcv,pd.Series):
             sell = control_method(position_ohlcv)
             result = position_ohlcv['sell']=sell
@@ -56,6 +57,6 @@ class Position_Control:
             sell = position_ohlcv.apply(control_method,axis=1)
             result = position_ohlcv['sell']=sell
 
-        return result
+        return position_ohlcv
 
 
