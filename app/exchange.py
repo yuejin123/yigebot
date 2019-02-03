@@ -358,7 +358,7 @@ class ExchangeInterface:
             my_trades =  self.exchanges[exchange].fetch_my_trades(order_info['symbol'])
             right_trades = list(filter(lambda a: a['order']==orderID,my_trades))
             trade_info = [{info[0]:trade[info[1]] for info in zip(trade_book_columns,my_trade_keys)} for trade in right_trades]
-            return {'status': status,'info':trade_info}1
+            return {'status': status,'info':trade_info}
         tm.sleep(self.exchanges[exchange].rateLimit / 1000)
 
 
