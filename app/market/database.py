@@ -56,7 +56,8 @@ TradeBook = db.Table('TradeBook',metadata,
                      db.Column('orderID',db.String,db.ForeignKey('OrderBook.orderID')),
                      db.Column('amount', db.Float),
                      db.Column('price', db.Float),
-                     db.Column('cost',db.Float),extend_existing=True) #total cost (including fees), `price * amount`
+                     db.Column('cost',db.Float),
+                     db.Column('fee', db.Float),extend_existing=True)
 
 Position = db.Table('Position',metadata,
                     db.Column('timestamp',db.Integer),
