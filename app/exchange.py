@@ -18,6 +18,11 @@ import structlog
 from tenacity import retry, retry_if_exception_type, stop_after_attempt
 import pandas as pd
 
+from market import database
+
+engine = database.engine
+conn = engine.connect()
+
 class ExchangeInterface:
     """Interface for performing queries against exchange APIs
     """
@@ -86,7 +91,6 @@ class ExchangeInterface:
             raise ValueError('No ticker data provided returned by exchange.')
 
         return ohlcv, ticker_data
-
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
     def get_historical_data(self, exchange, market_pair, time_unit, start_date=None, max_periods=1000):
@@ -278,19 +282,73 @@ class ExchangeInterface:
         return free
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    def create_order(self, exchange, market_pair, type, side, amount, price=None, **kwargs):
+        """
+        :param exchange:
+        :param market_pair:
+        :param type: order type, 'market' or 'limit'
+        :param side: 'buy' or 'sell'
+        :param amount: numeric, number of shares to buy or sell
+        :param price: optional, price at which to place the order; optional depending on the order type
+        :param kwargs: customized order parameters for overriding order types.
+        https://github.com/ccxt/ccxt/wiki/Manual#overriding-unified-api-params.
+
+        :return:
+        """
+        order = None
+        if type == 'market':
+            if side == 'buy':
+                if self.exchanges[exchange].has['create_market_buy_order']:
+                    order = self.exchanges[exchange].create_market_buy_order(market_pair, amount)
+            elif side == 'sell':
+                if self.exchanges[exchange].has['create_market_sell_order']:
+                    order = self.exchanges[exchange].create_market_sell_order(market_pair, amount)
+            else:
+                self.logger.error("Invalid order: %s", side)
+
+        elif type == 'limit':
+            if side == 'buy':
+                if self.exchanges[exchange].has['create_limit_buy_order']:
+                    order = self.exchanges[exchange].create_limit_buy_order(market_pair, amount, price)
+            elif side == 'short':
+                if self.exchanges[exchange].has['create_limit_sell_order']:
+                    order = self.exchanges[exchange].create_limit_sell_order(market_pair, amount, price)
+            else:
+                self.logger.error("Invalid order: %s", side)
+
+        else:
+            order = self.exchanges[exchange].createOrder(market_pair, type, side, amount, price, **kwargs)
+
+        position = 'long' if side == 'buy' else 'short'
+
+        with database.lock:
+            ins = database.OrderBook.insert().values(timestamp=order['timestamp'],
+                                                     datetime=order['datetime'],
+                                                     orderID=order['id'],
+                                                     orderType=order['type'],
+                                                     exchange=exchange,
+                                                     symbol=order['symbol'],
+                                                     position=position,
+                                                     amount=order['amount'],
+                                                     price=price)
+            conn.execute(ins)
+        tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+        return order
+
+    @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
     def get_order_info(self, exchange,orderID):
         """
-        Get free balance for the account within the exchange
+        Get order info using order ID and exchange as reference
 
         :param exchange: string or list of string, exchange to query the balance
         :param orderID: string, order ID
         :return: order status and trade information related to the order if the order is closed.
         """
         my_trade_keys = ["timestamp","datetime","id","order","amount","price","cost"]
-        trade_book_columns =  ['timestamp','datetome','tradeID','orderID','amount','price','cost']
+        trade_book_columns =  ['timestamp','datetome','tradeID','orderID','amount','price','cost','fee']
         trade_info = None
         status=None
-        if self.exchanges['exchange'].has['fetch_order']:
+        if self.exchanges[exchange].has['fetchOrder']:
             order_info = self.exchanges[exchange].fetch_order(orderID)
             status = order_info['status']
         if not status: raise ValueError('The exchange does not return order status')
@@ -300,7 +358,9 @@ class ExchangeInterface:
             my_trades =  self.exchanges[exchange].fetch_my_trades(order_info['symbol'])
             right_trades = list(filter(lambda a: a['order']==orderID,my_trades))
             trade_info = [{info[0]:trade[info[1]] for info in zip(trade_book_columns,my_trade_keys)} for trade in right_trades]
-            return {'status': status,'info':trade_info}
+            return {'status': status,'info':trade_info}1
+        tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+
 
 class TFSExchangeCalendar(TradingCalendar):
     """
