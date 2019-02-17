@@ -317,7 +317,7 @@ class ExchangeInterface:
         :param kwargs: customized order parameters for overriding order types.
         https://github.com/ccxt/ccxt/wiki/Manual#overriding-unified-api-params.
 
-        :return:
+        :return: order confirmation
         """
         order = None
         if type == 'market':
@@ -369,7 +369,7 @@ class ExchangeInterface:
         :return: order status and trade information related to the order if the order is closed.
         """
         my_trade_keys = ["timestamp","datetime","id","order","amount","price","cost",'fee']
-        trade_book_columns =  ['timestamp','datetome','tradeID','orderID','amount','price','cost','fee']
+        trade_book_columns =  ['timestamp','datetime','tradeID','orderID','amount','price','cost','fee']
         trade_info = None
         status=None
         if self.exchanges[exchange].has['fetchOrder']:
