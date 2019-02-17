@@ -12,6 +12,8 @@ from pandas.tseries.offsets import CustomBusinessDay
 from trading_calendars import register_calendar, TradingCalendar
 from trading_calendars.errors import  CalendarNameCollision
 from zipline.utils.memoize import lazyval
+from ccxt.base.errors import OrderNotFound
+
 
 import ccxt
 import structlog
@@ -281,6 +283,28 @@ class ExchangeInterface:
 
         return free
 
+
+    @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
+    def cancel_order(self, exchange, orderID, **kwargs):
+        """
+        :param exchange:
+        :param orderID: the ID of the order to be canceled
+        :param kwargs: other variables, i.e. symbol
+        :return:
+        """
+        try:
+            self.exchanges[exchange].cancelOrder(orderID,kwargs)
+            with database.lock:
+                delete = database.OrderBook.delete().where(orderID=orderID)
+                conn.execute(delete)
+
+        except OrderNotFound:
+            print("Order already executed")
+            return None
+
+        tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+        return
+
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))
     def create_order(self, exchange, market_pair, type, side, amount, price=None, **kwargs):
         """
@@ -344,7 +368,7 @@ class ExchangeInterface:
         :param orderID: string, order ID
         :return: order status and trade information related to the order if the order is closed.
         """
-        my_trade_keys = ["timestamp","datetime","id","order","amount","price","cost"]
+        my_trade_keys = ["timestamp","datetime","id","order","amount","price","cost",'fee']
         trade_book_columns =  ['timestamp','datetome','tradeID','orderID','amount','price','cost','fee']
         trade_info = None
         status=None
