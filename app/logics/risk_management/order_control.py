@@ -24,7 +24,7 @@ class Order_Control:
         self.order_book = order_book
         self.price = price
         self.size= size
-    def __simple_price_control(self):
+    def _simple_price_control(self):
         if self.price is not None: return self.price
         else:
             mid = 0.5 * self.order_book['bids'].iloc[0, 0] + 0.5 * self.order_book['asks'].iloc[0, 0]
@@ -32,10 +32,10 @@ class Order_Control:
             else: self.price = mid
             return self.price
 
-    def __simple_size_control(self):
+    def _simple_size_control(self):
         if self.size is not None: return self.size
         else:
-            if not self.position:
+            if self.position is None:
                 # no position built for the asset yet
                 if self.type=='long':
                     self.size = 0.25*self.free/self.price
@@ -46,14 +46,13 @@ class Order_Control:
                 if self.type=='long':
                     self.size = min(self.position['amount'].sum(),0.5*self.free/self.price)
                 else:
-                    self.size = 0.5(self.position['amount'].sum())
+                    self.size = 0.5*(self.position['amount'].sum())
             return self.size
 
 
-    def simple_control(self,position_ohlcv):
-
-        logger.info("Using simple order control to "+self.type + ' '+self.size+' shares of '+self.symbol + ' at '+self.price+' in '+self.exchange)
-        self.__simple_price_control()
-        self.__simple_size_control()
+    def simple_control(self):
+        self._simple_price_control()
+        self._simple_size_control()
+        logger.info(
+            "Using simple order control to " + self.type + ' ' + str(self.size) + ' shares of ' + self.symbol + ' at ' + str(self.price) + ' in ' + self.exchange)
         return self.price,self.size
-

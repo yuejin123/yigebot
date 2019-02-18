@@ -3,7 +3,7 @@ from logics.strategies.backtest_optim import Backtest_Optim
 
 class CDL_Test(Backtest_Optim):
 
-    def __init__(self, ohlcv, symbol='BTC', frequency='daily'):
+    def __init__(self, ohlcv=None, symbol='BTC', frequency='daily'):
         super().__init__(ohlcv,symbol,frequency)
 
     # override the _handle_data method for different strategie

@@ -356,7 +356,11 @@ class ExchangeInterface:
                                                      amount=order['amount'],
                                                      price=price)
             conn.execute(ins)
+        self.logger.info(
+            '%s order placed. Price: %.2f, Amount: %.2f' %(side,order['amount']))
+
         tm.sleep(self.exchanges[exchange].rateLimit / 1000)
+
         return order
 
     @retry(retry=retry_if_exception_type(ccxt.NetworkError), stop=stop_after_attempt(3))

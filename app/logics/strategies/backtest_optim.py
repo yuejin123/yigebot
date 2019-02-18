@@ -19,7 +19,7 @@ class Backtest_Optim:
     """
 
 
-    def __init__(self,ohlcv,asset_symbol='BTC',frequency='daily'):
+    def __init__(self,ohlcv=None,asset_symbol='BTC',frequency='daily'):
         """
         Args:
         ohlcv: returns from ccxt.exchange.fetch_ohlcv()
@@ -53,15 +53,17 @@ class Backtest_Optim:
         self.asset_symbol = asset_symbol
         self.frequency = frequency
         ohlcv_df = convert_to_dataframe(ohlcv)
-        data = OrderedDict()
-        temp = ohlcv_df
-        # FIXME: only works for daily frequency data...
-        if frequency =='daily':
-            temp.index = list(map(lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0), ohlcv_df.close.index))
-        data[self.asset_symbol] = temp
-        #TODO: Panel is deprecated, Panel data might be discarded in later version of zipline
-        self.panel = pd.Panel(data)
-        self.panel.minor_axis = ['open', 'high', 'low', 'close', 'volume']
+        if ohlcv is not None:
+            data = OrderedDict()
+            temp = ohlcv_df
+            if frequency =='daily':
+                temp.index = list(map(lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0), ohlcv_df.close.index))
+            data[self.asset_symbol] = temp
+            #TODO: Panel is deprecated, Panel data might be discarded in later version of zipline
+            self.panel = pd.Panel(data)
+            self.panel.minor_axis = ['open', 'high', 'low', 'close', 'volume']
+
+
 
     def initialize_(self,params_list,commission_cost,*args,**kwargs):
         """
