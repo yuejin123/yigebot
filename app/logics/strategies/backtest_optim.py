@@ -52,8 +52,9 @@ class Backtest_Optim:
 
         self.asset_symbol = asset_symbol
         self.frequency = frequency
-        ohlcv_df = convert_to_dataframe(ohlcv)
+
         if ohlcv is not None:
+            ohlcv_df = convert_to_dataframe(ohlcv)
             data = OrderedDict()
             temp = ohlcv_df
             if frequency =='daily':
