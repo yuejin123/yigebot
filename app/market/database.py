@@ -70,6 +70,7 @@ Position = db.Table('Position',metadata,
                     db.Column('cost',db.Float),extend_existing=True)
 
 
+
 def drop_tables():
     print('Dropping tables...')
     metadata.drop_all(engine)
@@ -83,3 +84,4 @@ def reset_db():
     print('Resetting database...')
     drop_tables()
     create_tables()
+
