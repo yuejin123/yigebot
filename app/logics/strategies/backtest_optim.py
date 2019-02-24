@@ -217,7 +217,7 @@ class Backtest_Optim:
 
     def refit(self,ohlcv,params = None, ba = None,**kwargs):
         """
-        refit the strategy using given parameters
+        refit the strategy using given parameters and return signals
 
         :param ohlcv: a DataFrame object with OHLCV columns ordered by date, ascending
         :param params: optimal parameters
