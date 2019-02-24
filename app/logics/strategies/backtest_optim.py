@@ -217,6 +217,8 @@ class Backtest_Optim:
 
     def refit(self,ohlcv,params = None, ba = None,**kwargs):
         """
+        refit the strategy using given parameters
+
         :param ohlcv: a DataFrame object with OHLCV columns ordered by date, ascending
         :param params: optimal parameters
         :ba: bid ask spread
@@ -235,6 +237,8 @@ class Backtest_Optim:
             buy_signal = (ema_s > ema_l) and (close[-1] > (bb[1])) and (
                     close[-1] > ema_s)
         else:
+            bid = ba['bid']
+            ask = ba['ask']
             mid = (bid[-1]+ask[-1])/2
             buy_signal = (ema_s > ema_l) and (mid > (bb[1])) and (
                     mid > ema_s)
