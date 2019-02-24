@@ -19,8 +19,12 @@ conn = engine.connect()
 tickers={}
 def start_ticker(exchangeInterface,exchange, market_pair='BTC/USD',  interval='1h'):
     """Start a ticker/timer that notifies market watchers when to pull a new candle"""
-    tickers[interval] = Thread(\
-            target=__start_ticker, args=(exchangeInterface,exchange,market_pair,interval,),name='start_ticker').start()
+    try:
+        tickers[interval] = Thread( \
+            target=__start_ticker, args=(exchangeInterface, exchange, market_pair, interval,),
+            name='start_ticker').start()
+    except KeyboardInterrupt:
+        sys.exit(0)
 
 def get_latest_data_from_db(exchange,market_pair, interval,periods = 1):
     """
@@ -108,7 +112,7 @@ def __start_ticker(exchangeInterface,exchange, market_pair, interval,backfill=30
         live_tick_count += 1
         print(ticker['datetime'])
 
-        sleep_time = max(exchangeInterface.exchanges[exchange].rateLimit/1000,__convert_interval_to_int(interval))
+        sleep_time = max(excmhangeInterface.exchanges[exchange].rateLimit/1000,__convert_interval_to_int(interval))
 
         time_.sleep(sleep_time)
 
