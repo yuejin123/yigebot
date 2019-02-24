@@ -1,0 +1,45 @@
+# Copy this file to config.yml to get started and then add your own configuration.
+# Full documentation here: https://github.com/CryptoSignal/crypto-signal/blob/master/docs/config.md
+
+
+services:
+  web:
+    build:
+    ports:
+     - "5000:5000"
+ 
+settings:
+  update_interval: 1m
+  market_pairs:
+    - BTC/USD
+  backtest_periods: 500
+
+exchanges:
+  gdax:
+    required:
+      enabled: true
+    api:
+      enabled: true
+      setting:
+        apiKey: None
+        secret: None
+        password: None
+# sandbox: ticker unstable
+#  coinbasepro:
+#    required:
+#      enabled: true
+#    api:
+#        enabled: true
+#        setting:
+#          apiKey: None
+#          secret: None
+#          urls:
+#            api: 'https://api-public.sandbox.pro.coinbase.com'
+
+strategies:
+
+    talib_cdl:
+      backtest_optim: CDL_Test
+      indicator: CDLHARAMI
+      trailing_window: 15
+      interval: 1m
