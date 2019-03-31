@@ -112,7 +112,7 @@ def __start_ticker(exchangeInterface,exchange, market_pair, interval,backfill=30
         live_tick_count += 1
         print(ticker['datetime'])
 
-        sleep_time = max(excmhangeInterface.exchanges[exchange].rateLimit/1000,__convert_interval_to_int(interval))
+        sleep_time = max(exchangeInterface.exchanges[exchange].rateLimit/1000,__convert_interval_to_int(interval))
 
         time_.sleep(sleep_time)
 
